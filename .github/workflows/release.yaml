@@ -38,30 +38,31 @@ jobs:
           df -ah
           docker buildx du
 
+      - name: Login to ECR
+        if: github.event_name != 'pull_request'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
       - name: Docker meta (controller)
         id: controller-meta
         uses: docker/metadata-action@v3
         with:
           images: |
-            quay.io/argoproj/argo-rollouts
-          # ghcr.io/argoproj/argo-rollouts
+            ${{ steps.login-ecr.outputs.registry }}/argo-rollouts
           tags: |
             type=semver,pattern={{version}},prefix=v,value=${{ github.event.inputs.tag }}
           flavor: |
             latest=false
-
       - name: Docker meta (plugin)
         id: plugin-meta
         uses: docker/metadata-action@v3
         with:
           images: |
-            quay.io/argoproj/kubectl-argo-rollouts
-          #  ghcr.io/argoproj/kubectl-argo-rollouts
+            ${{ steps.login-ecr.outputs.registry }}/kubectl-argo-rollouts
           tags: |
             type=semver,pattern={{version}},prefix=v,value=${{ github.event.inputs.tag }}
           flavor: |
             latest=false
-
       # - name: Login to GitHub Container Registry
       #   if: github.event_name != 'pull_request'
       #   uses: docker/login-action@v1
@@ -70,13 +71,6 @@ jobs:
       #     username: ${{ github.repository_owner }}
       #     password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Quay.io
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v1
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_ROBOT_TOKEN }}
 
       - name: Build and push (controller-image)
         uses: docker/build-push-action@v2

@@ -93,6 +93,23 @@ func DesiredReplicaCountsForCanary(rollout *v1alpha1.Rollout, newRS, stableRS *a
 }
 */
 
+func calculateRolloutSteps(rolloutSpecReplica int, desiredWeight float64) (int32, int32) {
+	if int32(desiredWeight) == 0 {
+		desiredStableRSReplicaCount := int32(rolloutSpecReplica)
+		desiredNewRSReplicaCount := int32(0)
+		return desiredNewRSReplicaCount, desiredStableRSReplicaCount
+	} else {
+// 		fmt.Println("Total replica count is: ", rolloutSpecReplica)
+		desiredStableRSReplicaCount := int32(math.Ceil(float64(rolloutSpecReplica) * (1 - (float64(desiredWeight) / 100))))
+		desiredNewRSReplicaCount := int32(int32(rolloutSpecReplica) - desiredStableRSReplicaCount)
+		if desiredNewRSReplicaCount == 0 {
+			desiredNewRSReplicaCount = 1
+			desiredStableRSReplicaCount--
+		}
+		return desiredNewRSReplicaCount, desiredStableRSReplicaCount
+	}
+}
+
 // CalculateReplicaCountsForBasicCanary calculates the number of replicas for the newRS and the stableRS
 // when using the basic canary strategy. The function calculates the desired number of replicas for
 // the new and stable RS using the following equations:
@@ -132,8 +149,9 @@ func CalculateReplicaCountsForBasicCanary(rollout *v1alpha1.Rollout, newRS *apps
 	rolloutSpecReplica := defaults.GetReplicasOrDefault(rollout.Spec.Replicas)
 	_, desiredWeight := GetCanaryReplicasOrWeight(rollout)
 
-	desiredStableRSReplicaCount := int32(math.Ceil(float64(rolloutSpecReplica) * (1 - (float64(desiredWeight) / 100))))
-	desiredNewRSReplicaCount := int32(math.Ceil(float64(rolloutSpecReplica) * (float64(desiredWeight) / 100)))
+// 	desiredStableRSReplicaCount := int32(math.Ceil(float64(rolloutSpecReplica) * (1 - (float64(desiredWeight) / 100))))
+// 	desiredNewRSReplicaCount := int32(math.Ceil(float64(rolloutSpecReplica) * (float64(desiredWeight) / 100)))
+	desiredStableRSReplicaCount, desiredNewRSReplicaCount := calculateRolloutSteps(int(rolloutSpecReplica), float64(desiredWeight))
 
 	stableRSReplicaCount := int32(0)
 	newRSReplicaCount := int32(0)
