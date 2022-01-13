@@ -8,7 +8,7 @@ on:
         required: true  
 jobs:
   release-images:
-    runs-on: ubuntu-latest
+    runs-on: [general, prod]
 
     steps:
       - name: Checkout
@@ -37,12 +37,25 @@ jobs:
           df -ah
           docker buildx du
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+          role-duration-seconds: 3600
+          role-to-assume: general-prod-01-github-actions
+
+      - name: Login to ECR
+        if: github.event_name != 'pull_request'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
       - name: Docker meta (controller)
         id: controller-meta
         uses: docker/metadata-action@v3
         with:
           images: |
-            quay.io/argoproj/argo-rollouts
+            ${{ steps.login-ecr.outputs.registry }}/argo-rollouts-controller
+          # quay.io/argoproj/argo-rollouts
           # ghcr.io/argoproj/argo-rollouts
           tags: |
             type=semver,pattern={{version}},prefix=v,value=${{ github.event.inputs.tag }}
@@ -54,28 +67,11 @@ jobs:
         uses: docker/metadata-action@v3
         with:
           images: |
-            quay.io/argoproj/kubectl-argo-rollouts
-          #  ghcr.io/argoproj/kubectl-argo-rollouts
+            ${{ steps.login-ecr.outputs.registry }}/kubectl-argo-rollouts
           tags: |
             type=semver,pattern={{version}},prefix=v,value=${{ github.event.inputs.tag }}
           flavor: |
             latest=false
-
-      # - name: Login to GitHub Container Registry
-      #   if: github.event_name != 'pull_request'
-      #   uses: docker/login-action@v1
-      #   with:
-      #     registry: ghcr.io
-      #     username: ${{ github.repository_owner }}
-      #     password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to Quay.io
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v1
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_ROBOT_TOKEN }}
 
       - name: Build and push (controller-image)
         uses: docker/build-push-action@v2
@@ -86,6 +82,11 @@ jobs:
           tags: ${{ steps.controller-meta.outputs.tags }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
+          with:
+            registry: ${{ steps.login-ecr.outputs.registry }}
+            repository: argo-rollouts-controller
+            add_git_labels: true
+            tag_with_ref: true
 
       - name: Build and push (plugin-image)
         uses: docker/build-push-action@v2
@@ -97,6 +98,10 @@ jobs:
           tags: ${{ steps.plugin-meta.outputs.tags }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
+          registry: ${{ steps.login-ecr.outputs.registry }}
+          repository: kubectl-argo-rollouts
+          add_git_labels: true
+          tag_with_ref: true
 
         # Temp fix
         # https://github.com/docker/build-push-action/issues/252

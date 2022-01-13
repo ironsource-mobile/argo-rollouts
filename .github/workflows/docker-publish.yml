@@ -5,13 +5,12 @@ on:
     branches:
       - master
       - release-*
-
   # Run tests for any PRs.
   pull_request:
 
 jobs:
-  docker:
-    runs-on: ubuntu-latest
+  release-images:
+    runs-on: [general, prod]
 
     steps:
       - name: Checkout
@@ -31,13 +30,25 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-buildx-
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-region: us-east-1
+          role-duration-seconds: 3600
+          role-to-assume: general-prod-01-github-actions
+
+      - name: Login to ECR
+        if: github.event_name != 'pull_request'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+
       - name: Docker meta (controller)
         id: controller-meta
         uses: docker/metadata-action@v3
         with:
           images: |
-            quay.io/argoproj/argo-rollouts
-          # ghcr.io/argoproj/argo-rollouts
+            ${{ steps.login-ecr.outputs.registry }}/argo-rollouts-controller
           tags: |
             type=ref,event=branch
           flavor: |
@@ -48,28 +59,12 @@ jobs:
         uses: docker/metadata-action@v3
         with:
           images: |
-            quay.io/argoproj/kubectl-argo-rollouts
-          # ghcr.io/argoproj/kubectl-argo-rollouts
+            ${{ steps.login-ecr.outputs.registry }}/kubectl-argo-rollouts
           tags: |
             type=ref,event=branch
           flavor: |
             latest=${{ github.ref == 'refs/heads/master' }}
 
-      # - name: Login to GitHub Container Registry
-      #   if: github.event_name != 'pull_request'
-      #   uses: docker/login-action@v1 
-      #   with:
-      #     registry: ghcr.io
-      #     username: ${{ github.repository_owner }}
-      #     password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Login to Quay.io
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v1
-        with:
-          registry: quay.io
-          username: ${{ secrets.QUAY_USERNAME }}
-          password: ${{ secrets.QUAY_ROBOT_TOKEN }}
 
       # avoid building linux/arm64 for PRs since it takes so long
       - name: Set Platform Matrix
@@ -89,16 +84,21 @@ jobs:
           tags: ${{ steps.controller-meta.outputs.tags }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
+          registry: ${{ steps.login-ecr.outputs.registry }}
+          repository: argo-rollouts-controller
+          add_git_labels: true
+          tag_with_ref: true
 
       - name: Build and push (plugin-image)
         uses: docker/build-push-action@v2
         with:
-          target: kubectl-argo-rollouts
           platforms: ${{ steps.platform-matrix.outputs.platform-matrix }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.plugin-meta.outputs.tags }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
+          context: .
+          target: kubectl-argo-rollouts
 
         # Temp fix
         # https://github.com/docker/build-push-action/issues/252
