@@ -82,11 +82,10 @@ jobs:
           tags: ${{ steps.controller-meta.outputs.tags }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache
-          with:
-            registry: ${{ steps.login-ecr.outputs.registry }}
-            repository: argo-rollouts-controller
-            add_git_labels: true
-            tag_with_ref: true
+          registry: ${{ steps.login-ecr.outputs.registry }}
+          repository: argo-rollouts-controller
+          add_git_labels: true
+          tag_with_ref: true
 
       - name: Build and push (plugin-image)
         uses: docker/build-push-action@v2
