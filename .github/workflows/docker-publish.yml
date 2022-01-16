@@ -92,13 +92,14 @@ jobs:
       - name: Build and push (plugin-image)
         uses: docker/build-push-action@v2
         with:
+          context: .
+          target: kubectl-argo-rollouts
           platforms: ${{ steps.platform-matrix.outputs.platform-matrix }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.plugin-meta.outputs.tags }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
-          context: .
-          target: kubectl-argo-rollouts
+
 
         # Temp fix
         # https://github.com/docker/build-push-action/issues/252
